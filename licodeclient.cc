@@ -315,6 +315,7 @@ namespace licode {
             $trace_p(json);
 
             if (obs && parse::checkarraynull(json)) {
+                //int64_t xx=std::strtoll(json.substr((json.find_first_of("[") + 1), json.find_first_of("]")).c_str());
                 int64_t id = ddscore::util::strtoi<int64_t>(json.substr((json.find_first_of("[") + 1), json.find_first_of("]")));
 #if _DEBUG
                 licodestream pubstream(id, stream_name);
@@ -684,7 +685,7 @@ namespace licode {
             joinfail = fail;
         }
         
-        const static char* regex = "^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{4}|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)$";
+        /*const static char* regex = "^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{4}|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)$";
 
         std::regex base64regex(regex);
 
@@ -692,9 +693,16 @@ namespace licode {
         {
             fail(failtype::BAD_PARAMETER);
             return;
-        }
+        }*/
 
-        std::string decodetoken = base64::decode<std::string>(token);
+        std::string decodetoken;
+        try {
+            decodetoken = base64::decode<std::string>(token);
+        }
+        catch (const cppcodec::parse_error& error) {
+            fail(failtype::BAD_PARAMETER);
+            return;
+        }
 
         licoderoom* joinroom = new licoderoom(room,decodetoken);
 
