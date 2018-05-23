@@ -133,6 +133,7 @@ namespace licode {
         void onstreamaddevent(const std::string& json);
         void on_signaling_message_erizo(const std::string& json);
         void onremovestream(const std::string& json);
+        void ondisconnectfromserver(const std::string& json);
 
     private:
         std::string _roomdiscription;

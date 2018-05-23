@@ -177,8 +177,38 @@ namespace licode {
 
 
     void licoderoom::onsocketioconneted() {
+        rapidjson::Document document;
+        if (document.Parse<0>(mtoken.c_str()).HasParseError())
+        {
+            return;
+        };
+
+        if (!document.HasMember("tokenId")
+            || !document.HasMember("host")
+            || !document.HasMember("secure")
+            || !document.HasMember("signature"))
+            return;
+
+        // send unpublish message
+        rapidjson::StringBuffer s;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(s);
+        writer.StartObject();
+        writer.Key("token");
+        writer.StartObject();
+        writer.Key("tokenId");
+        writer.String(document["tokenId"].GetString());
+        writer.Key("host");
+        writer.String(document["host"].GetString());
+        writer.Key("secure");
+        writer.Bool(document["secure"].GetBool());
+        writer.Key("signature");
+        writer.String(document["signature"].GetString());
+        writer.EndObject();
+        writer.EndObject();
+
+        sio::message::ptr token_ptr = parse::getMessage(s.GetString());
         sio::socket::ptr socket = mclient->socket();
-        sio::message::ptr token_ptr = parse::getMessage(mtoken);
+        
         // licode use json object
         socket->emit("token", token_ptr, [this](const sio::message::list& acks) {
             std::string json = parse::getjson(acks.to_array_message());
@@ -476,6 +506,10 @@ namespace licode {
         }
     }
 
+    void licoderoom::ondisconnectfromserver(const std::string& json) {
+        $trace_p(json);
+        $trace_p(mclient->opened());
+    }
 
     void licoderoom::bindevent() {
         // register event
@@ -585,13 +619,12 @@ namespace licode {
             $trace_p("on onUpdateAttributeStream not implementation yet");
 
         }));
-        socket->on("disconnect", sio::socket::event_listener_aux([&](
+        socket->on("disconnect", sio::socket::event_listener_aux([=](
             std::string const& name,
             sio::message::ptr const& data,
             bool isAck,
             sio::message::list &ack_resp) {
-            $trace_p("on disconnect not implementation yet");
-
+            ondisconnectfromserver(parse::getjson(data));
         }));
         socket->on("connection_failed", sio::socket::event_listener_aux([&](
             std::string const& name,
