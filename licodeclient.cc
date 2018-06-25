@@ -10,6 +10,9 @@
 #include "common/trace_out.h"
 #include "common/string_util.h"
 #include "socket.io-client-cpp/internal/sio_packet.h"
+#include "common/Semaphore.h"
+
+static common::semaphore socketclose_sem;
 
 namespace licode {
     namespace parse {
@@ -151,6 +154,7 @@ namespace licode {
         });
         mclient->set_close_listener([](sio::client::close_reason const& reason) {
             $trace_p("socketio closed");
+            //socketclose_sem.notify_one();
         });
         mclient->set_fail_listener([&]() {
             fail(failtype::SOCKET_IO_FAILE);
@@ -160,15 +164,16 @@ namespace licode {
 
     void licoderoom::disconnect() {
         if (mclient) {
+            mclient->clear_con_listeners();
+            mclient->clear_socket_listeners();
             mclient->sync_close();
+            //socketclose_sem.acquire();
         }
     }
 
     licoderoom::~licoderoom() {
         if (mclient)
         {
-            mclient->clear_con_listeners();
-            mclient->clear_socket_listeners();
             delete mclient;
             mclient = nullptr;
         }
@@ -177,38 +182,8 @@ namespace licode {
 
 
     void licoderoom::onsocketioconneted() {
-        rapidjson::Document document;
-        if (document.Parse<0>(mtoken.c_str()).HasParseError())
-        {
-            return;
-        };
-
-        if (!document.HasMember("tokenId")
-            || !document.HasMember("host")
-            || !document.HasMember("secure")
-            || !document.HasMember("signature"))
-            return;
-
-        // send unpublish message
-        rapidjson::StringBuffer s;
-        rapidjson::Writer<rapidjson::StringBuffer> writer(s);
-        writer.StartObject();
-        writer.Key("token");
-        writer.StartObject();
-        writer.Key("tokenId");
-        writer.String(document["tokenId"].GetString());
-        writer.Key("host");
-        writer.String(document["host"].GetString());
-        writer.Key("secure");
-        writer.Bool(document["secure"].GetBool());
-        writer.Key("signature");
-        writer.String(document["signature"].GetString());
-        writer.EndObject();
-        writer.EndObject();
-
-        sio::message::ptr token_ptr = parse::getMessage(s.GetString());
         sio::socket::ptr socket = mclient->socket();
-        
+        sio::message::ptr token_ptr = parse::getMessage(mtoken);
         // licode use json object
         socket->emit("token", token_ptr, [this](const sio::message::list& acks) {
             std::string json = parse::getjson(acks.to_array_message());
@@ -312,7 +287,7 @@ namespace licode {
 
     }
 
-    void licoderoom::publish(const std::string& stream_name, bool video, bool audio, const onfail<failtype>& fail) {
+    void licoderoom::publish(const std::string& stream_name, const onfail<failtype>& fail) {
         // send publish message get streamid
         rapidjson::StringBuffer s;
         rapidjson::Writer<rapidjson::StringBuffer> writer(s);
@@ -322,9 +297,9 @@ namespace licode {
         writer.Key("data");
         writer.Bool(false);
         writer.Key("audio");
-        writer.Bool(audio);
+        writer.Bool(true);
         writer.Key("video");
-        writer.Bool(video);
+        writer.Bool(true);
         writer.Key("minVideoBW");
         writer.Int(0);
         writer.Key("attributes");
@@ -357,7 +332,7 @@ namespace licode {
         });
     }
 
-    void licoderoom::subscriber(int64_t streamid, bool video, bool audio, const onfail<failtype>& fail) {
+    void licoderoom::subscriber(int64_t streamid, const onfail<failtype>& fail) {
         // send publish message get streamid
         rapidjson::StringBuffer s;
         rapidjson::Writer<rapidjson::StringBuffer> writer(s);
@@ -367,9 +342,16 @@ namespace licode {
         writer.Key("slideShowMode");
         writer.Bool(false);
         writer.Key("audio");
-        writer.Bool(audio);
+        writer.Bool(true);
         writer.Key("video");
-        writer.Bool(video);
+        writer.Bool(true);
+        writer.Key("muteStream");
+        writer.StartObject();
+        writer.Key("video");
+        writer.Bool(true);
+        writer.Key("audio");
+        writer.Bool(true);
+        writer.EndObject();
         writer.EndObject();
 
         sio::message::ptr jsonobj = parse::getMessage(s.GetString());
@@ -380,9 +362,42 @@ namespace licode {
             $trace_p(json);
             if (parse::checkarraybool(json)) {
                 if (obs) {
-                    obs->OnSubscriber(streamid, audio, video);
+                    obs->OnSubscriber(streamid);
                 }
             }
+        });
+    }
+
+    void licoderoom::updatestream(int64_t streamid, bool mutevideo, bool muteaudio) {
+        // signaling_message updatestream
+        rapidjson::StringBuffer ss;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(ss);
+        writer.StartObject();
+        writer.Key("streamId");
+        writer.Int64(streamid);
+        writer.Key("msg");
+        writer.StartObject();
+        writer.Key("type");
+        writer.String("updatestream");
+        writer.Key("config");
+        writer.StartObject();
+        writer.Key("muteStream");
+        writer.StartObject();
+        writer.Key("video");
+        writer.Bool(mutevideo);
+        writer.Key("audio");
+        writer.Bool(muteaudio);
+        writer.EndObject();
+        writer.EndObject();
+        writer.EndObject();
+        writer.EndObject();
+
+        sio::message::ptr jsonobj = parse::getMessage(ss.GetString());
+        sio::socket::ptr socket = mclient->socket();
+
+        socket->emit("signaling_message", jsonobj, [this](const sio::message::list& acks) {
+            std::string json = parse::getjson(acks.to_array_message());
+            $trace_p(json);
         });
     }
 

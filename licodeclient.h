@@ -56,7 +56,7 @@ namespace licode {
         virtual void OnRemoveStream(int64_t streamid) = 0;
         virtual void OnPublish(const licodestream& localstream) = 0;
         virtual void OnUnPublish(int64_t streamid) = 0;
-        virtual void OnSubscriber(int64_t streamid, bool audio = true, bool video = true) = 0;
+        virtual void OnSubscriber(int64_t streamid) = 0;
         virtual void OnUnSubscriber(int64_t streamid) = 0;
         virtual void OnRemoteSDP(int64_t streamid, const std::string& remote_sdp) = 0;
     };
@@ -97,10 +97,11 @@ namespace licode {
     class licoderoom {
         friend class licodeclient;
     public:
-        void publish(const std::string& stream_name, bool video = true, bool audio = true, const onfail<failtype>& fail = nullptr);
+        void publish(const std::string& stream_name, const onfail<failtype>& fail = nullptr);
         void unpublish(int64_t streamid, const onfail<failtype>& fail = nullptr);
-        void subscriber(int64_t streamid, bool video=true,bool audio=true,const onfail<failtype>& fail = nullptr);
+        void subscriber(int64_t streamid, const onfail<failtype>& fail = nullptr);
         void unsubscriber(int64_t streamid, bool* hasUnSubscriber, const onfail<failtype>& fail = nullptr);
+        void updatestream(int64_t streamid, bool mutevideo, bool muteaudio);
         void sendSDP(const std::string& sdp, int64_t streamid);
         void sendCandidate(const std::string& candidate, int mline_index,
                            const std::string& sdp_mid, int64_t streamid);
